@@ -108,6 +108,7 @@
         function ResizePlugin(resizeTarget, container, editor, options) {
             this.resizer = null;
             this.startResizePosition = null;
+            this.currentHandler = null; // Track the active resize handler
             this.i18n = new I18n((options === null || options === void 0 ? void 0 : options.locale) || defaultLocale);
             this.options = options;
             this.resizeTarget = resizeTarget;
@@ -142,7 +143,7 @@
         ResizePlugin.prototype.positionResizerToTarget = function (el) {
             if (this.resizer !== null) {
                 this.resizer.style.setProperty("left", el.offsetLeft + "px");
-                this.resizer.style.setProperty("top", (el.offsetTop - this.editor.scrollTop) + "px");
+                this.resizer.style.setProperty("top", el.offsetTop - this.editor.scrollTop + "px");
                 this.resizer.style.setProperty("width", el.clientWidth + "px");
                 this.resizer.style.setProperty("height", el.clientHeight + "px");
             }
@@ -155,7 +156,7 @@
             }
             window.addEventListener("mouseup", this.endResize);
             window.addEventListener("mousemove", this.resizing);
-            this.editor.addEventListener('scroll', this.onScroll);
+            this.editor.addEventListener("scroll", this.onScroll);
         };
         ResizePlugin.prototype.onScroll = function () {
             this.positionResizerToTarget(this.resizeTarget);
@@ -166,8 +167,7 @@
             var style = this.resizeTarget.style;
             var originStyles = this.resizeTarget[storeKey];
             style.cssText =
-                style.cssText.replaceAll(" ", "").replace(originStyles, "") +
-                    (";" + styles);
+                style.cssText.replaceAll(" ", "").replace(originStyles, "") + (";" + styles);
             this.resizeTarget[storeKey] = styles;
             this.positionResizerToTarget(this.resizeTarget);
             (_a = this.options) === null || _a === void 0 ? void 0 : _a.onChange(this.resizeTarget);
@@ -191,53 +191,52 @@
         };
         ResizePlugin.prototype.startResize = function (e) {
             var target = e.target;
-            if (target.classList.contains("handler") && e.which === 1) {
-                this.startResizePosition = {
-                    left: e.clientX,
-                    top: e.clientY,
-                    width: this.resizeTarget.clientWidth,
-                    height: this.resizeTarget.clientHeight,
-                };
-            }
-            if (target.classList.contains("handlerLeftTop") && e.which === 1) {
-                this.startResizePosition = {
-                    left: e.clientX,
-                    top: e.clientY,
-                    width: this.resizeTarget.clientWidth,
-                    height: this.resizeTarget.clientHeight,
-                };
-            }
-            if (target.classList.contains("handlerRightTop") && e.which === 1) {
-                this.startResizePosition = {
-                    left: e.clientX,
-                    top: e.clientY,
-                    width: this.resizeTarget.clientWidth,
-                    height: this.resizeTarget.clientHeight,
-                };
-            }
-            if (target.classList.contains("handlerLeftBottom") && e.which === 1) {
-                this.startResizePosition = {
-                    left: e.clientX,
-                    top: e.clientY,
-                    width: this.resizeTarget.clientWidth,
-                    height: this.resizeTarget.clientHeight,
-                };
-            }
+            if (e.which !== 1)
+                return;
+            if (target.classList.contains("handler"))
+                this.currentHandler = "rightBottom";
+            if (target.classList.contains("handlerLeftTop"))
+                this.currentHandler = "leftTop";
+            if (target.classList.contains("handlerRightTop"))
+                this.currentHandler = "rightTop";
+            if (target.classList.contains("handlerLeftBottom"))
+                this.currentHandler = "leftBottom";
+            this.startResizePosition = {
+                left: e.clientX,
+                top: e.clientY,
+                width: this.resizeTarget.clientWidth,
+                height: this.resizeTarget.clientHeight,
+            };
         };
         ResizePlugin.prototype.endResize = function () {
             var _a;
+            this.currentHandler = null;
             this.startResizePosition = null;
             (_a = this.options) === null || _a === void 0 ? void 0 : _a.onChange(this.resizeTarget);
         };
         ResizePlugin.prototype.resizing = function (e) {
-            if (!this.startResizePosition)
+            if (!this.startResizePosition || !this.currentHandler)
                 return;
             var deltaX = e.clientX - this.startResizePosition.left;
             var deltaY = e.clientY - this.startResizePosition.top;
             var width = this.startResizePosition.width;
             var height = this.startResizePosition.height;
-            width += deltaX;
-            height += deltaY;
+            if (this.currentHandler === "rightBottom") {
+                width += deltaX;
+                height += deltaY;
+            }
+            else if (this.currentHandler === "leftTop") {
+                width -= deltaX;
+                height -= deltaY;
+            }
+            else if (this.currentHandler === "rightTop") {
+                width += deltaX;
+                height -= deltaY;
+            }
+            else if (this.currentHandler === "leftBottom") {
+                width -= deltaX;
+                height += deltaY;
+            }
             if (e.altKey) {
                 var originSize = this.resizeTarget.originSize;
                 var rate = originSize.height / originSize.width;
@@ -251,7 +250,7 @@
             this.container.removeChild(this.resizer);
             window.removeEventListener("mouseup", this.endResize);
             window.removeEventListener("mousemove", this.resizing);
-            this.editor.removeEventListener('scroll', this.onScroll);
+            this.editor.removeEventListener("scroll", this.onScroll);
             this.resizer = null;
         };
         return ResizePlugin;

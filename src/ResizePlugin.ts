@@ -41,6 +41,7 @@ const template = `
   </div>
 </div>
 `;
+
 class ResizePlugin {
   resizeTarget: ResizeElement;
   resizer: HTMLElement | null = null;
@@ -49,6 +50,7 @@ class ResizePlugin {
   startResizePosition: Position | null = null;
   i18n: I18n;
   options: any;
+  currentHandler: string | null = null; // Track the active resize handler
 
   constructor(
     resizeTarget: ResizeElement,
@@ -65,7 +67,7 @@ class ResizePlugin {
         height: resizeTarget.clientHeight,
       };
     }
-    
+
     this.editor = editor;
     this.container = container;
     this.initResizer();
@@ -99,14 +101,19 @@ class ResizePlugin {
     }
     this.resizer = resizer;
   }
+
   positionResizerToTarget(el: HTMLElement) {
     if (this.resizer !== null) {
       this.resizer.style.setProperty("left", el.offsetLeft + "px");
-      this.resizer.style.setProperty("top", (el.offsetTop - this.editor.scrollTop) + "px");
+      this.resizer.style.setProperty(
+        "top",
+        el.offsetTop - this.editor.scrollTop + "px"
+      );
       this.resizer.style.setProperty("width", el.clientWidth + "px");
       this.resizer.style.setProperty("height", el.clientHeight + "px");
     }
   }
+
   bindEvents() {
     if (this.resizer !== null) {
       this.resizer.addEventListener("mousedown", this.startResize);
@@ -115,23 +122,25 @@ class ResizePlugin {
     }
     window.addEventListener("mouseup", this.endResize);
     window.addEventListener("mousemove", this.resizing);
-    this.editor.addEventListener('scroll', this.onScroll);
+    this.editor.addEventListener("scroll", this.onScroll);
   }
+
   onScroll() {
     this.positionResizerToTarget(this.resizeTarget);
   }
+
   _setStylesForToolbar(type: string, styles: string | undefined) {
     const storeKey = `_styles_${type}`;
     const style: CSSStyleDeclaration = this.resizeTarget.style;
     const originStyles = this.resizeTarget[storeKey];
     style.cssText =
-      style.cssText.replaceAll(" ", "").replace(originStyles, "") +
-      `;${styles}`;
+      style.cssText.replaceAll(" ", "").replace(originStyles, "") + `;${styles}`;
     this.resizeTarget[storeKey] = styles;
 
     this.positionResizerToTarget(this.resizeTarget);
     this.options?.onChange(this.resizeTarget);
   }
+
   toolbarInputChange(e: Event) {
     const target: HTMLInputElement = e.target as HTMLInputElement;
     const type = target?.dataset?.type;
@@ -140,6 +149,7 @@ class ResizePlugin {
       this._setStylesForToolbar(type, `width: ${Number(value)}%;`);
     }
   }
+
   toolbarClick(e: MouseEvent) {
     const target: HTMLElement = e.target as HTMLElement;
     const type = target?.dataset?.type;
@@ -148,53 +158,50 @@ class ResizePlugin {
       this._setStylesForToolbar(type, target?.dataset?.styles);
     }
   }
+
   startResize(e: MouseEvent) {
     const target: HTMLElement = e.target as HTMLElement;
-    if (target.classList.contains("handler") && e.which === 1) {
-      this.startResizePosition = {
-        left: e.clientX,
-        top: e.clientY,
-        width: this.resizeTarget.clientWidth,
-        height: this.resizeTarget.clientHeight,
-      };
-    }
-    if (target.classList.contains("handlerLeftTop") && e.which === 1) {
-      this.startResizePosition = {
-        left: e.clientX,
-        top: e.clientY,
-        width: this.resizeTarget.clientWidth,
-        height: this.resizeTarget.clientHeight,
-      };
-    }
-    if (target.classList.contains("handlerRightTop") && e.which === 1) {
-      this.startResizePosition = {
-        left: e.clientX,
-        top: e.clientY,
-        width: this.resizeTarget.clientWidth,
-        height: this.resizeTarget.clientHeight,
-      };
-    }
-    if (target.classList.contains("handlerLeftBottom") && e.which === 1) {
-      this.startResizePosition = {
-        left: e.clientX,
-        top: e.clientY,
-        width: this.resizeTarget.clientWidth,
-        height: this.resizeTarget.clientHeight,
-      };
-    }
+    if (e.which !== 1) return;
+
+    if (target.classList.contains("handler")) this.currentHandler = "rightBottom";
+    if (target.classList.contains("handlerLeftTop")) this.currentHandler = "leftTop";
+    if (target.classList.contains("handlerRightTop")) this.currentHandler = "rightTop";
+    if (target.classList.contains("handlerLeftBottom")) this.currentHandler = "leftBottom";
+
+    this.startResizePosition = {
+      left: e.clientX,
+      top: e.clientY,
+      width: this.resizeTarget.clientWidth,
+      height: this.resizeTarget.clientHeight,
+    };
   }
+
   endResize() {
+    this.currentHandler = null;
     this.startResizePosition = null;
     this.options?.onChange(this.resizeTarget);
   }
+
   resizing(e: MouseEvent) {
-    if (!this.startResizePosition) return;
+    if (!this.startResizePosition || !this.currentHandler) return;
     const deltaX: number = e.clientX - this.startResizePosition.left;
     const deltaY: number = e.clientY - this.startResizePosition.top;
     let width = this.startResizePosition.width;
     let height = this.startResizePosition.height;
-    width += deltaX;
-    height += deltaY;
+
+    if (this.currentHandler === "rightBottom") {
+      width += deltaX;
+      height += deltaY;
+    } else if (this.currentHandler === "leftTop") {
+      width -= deltaX;
+      height -= deltaY;
+    } else if (this.currentHandler === "rightTop") {
+      width += deltaX;
+      height -= deltaY;
+    } else if (this.currentHandler === "leftBottom") {
+      width -= deltaX;
+      height += deltaY;
+    }
 
     if (e.altKey) {
       const originSize = this.resizeTarget.originSize as Size;
@@ -211,7 +218,7 @@ class ResizePlugin {
     this.container.removeChild(this.resizer as HTMLElement);
     window.removeEventListener("mouseup", this.endResize);
     window.removeEventListener("mousemove", this.resizing);
-    this.editor.removeEventListener('scroll', this.onScroll);
+    this.editor.removeEventListener("scroll", this.onScroll);
     this.resizer = null;
   }
 }
